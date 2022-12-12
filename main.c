@@ -40,6 +40,15 @@ xSemaphoreHandle semaphore;
 /* TODO UART */
 
 int main(void) {
+
+    unsigned int seed = 4;
+    uint8_t nb_trucks;
+    uint8_t width;
+    uint8_t height;
+    uint8_t cristals[width][height];
+
+    init_game(seed, &nb_trucks, &width, &height, &cristals);
+
     /* Prepare the hardware to run */
     SetupHardware();
 
