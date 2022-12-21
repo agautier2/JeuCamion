@@ -21,6 +21,7 @@
 #include "BasysLib/uart.h"
 
 #include "game.h"
+#include "math.h"
 
 static unsigned int seed;
 static uint8_t nb_trucks;
@@ -88,6 +89,84 @@ void function(void *params)
     }
 }
 
+void function2(void *params)
+{
+    char commands[20];
+
+    char *moves[2] = {"MOVE", "DIG"};
+    process_param_t *ptr = params;
+    uint8_t min_distance = 255;
+    uint8_t x;
+    uint8_t y;
+    uint8_t d;
+    uint8_t coordonnee_x_la_plus_proche = 0;
+    uint8_t coordonnee_y_la_plus_proche = 0;
+    uint8_t hauteur;
+    uint8_t largeur;
+
+    while (1)
+    {
+        min_distance = MAX_HEIGHT + MAX_WIDTH;
+        for (hauteur = 0; hauteur < height; hauteur++)
+        {
+            for (largeur = 0; largeur < width; largeur++)
+            {
+                if (cristals[largeur + hauteur * width])
+                {
+                    x = abs(largeur - ptr->x);
+                    y = abs(hauteur - ptr->y);
+                    d = x + y;
+
+                    if (d < min_distance)
+                    {
+                        min_distance = d;
+                        coordonnee_x_la_plus_proche = largeur;
+                        coordonnee_y_la_plus_proche = hauteur;
+                    }
+                }
+            }
+        }
+        if (min_distance == MAX_HEIGHT + MAX_WIDTH)
+        {
+            break;
+        }
+
+        if (ptr->x > coordonnee_x_la_plus_proche)
+        {
+            ptr->move = 0;
+            ptr->x -= 1;
+        }
+        else if (ptr->x < coordonnee_x_la_plus_proche)
+        {
+            ptr->move = 0;
+            ptr->x += 1;
+        }
+        else if (ptr->y > coordonnee_y_la_plus_proche)
+        {
+            ptr->move = 0;
+            ptr->y -= 1;
+        }
+        else if (ptr->y < coordonnee_y_la_plus_proche)
+        {
+            ptr->move = 0;
+            ptr->y += 1;
+        }
+        else
+        {
+            ptr->move = 1;
+        }
+
+        if (ptr->move == 1)
+        {
+            cristals[ptr->x + ptr->y * width]--;
+        }
+
+        sprintf(commands, "%d %s %d %d %d", ptr->turn, moves[ptr->move], ptr->truck_id, ptr->x, ptr->y);
+        puts(commands);
+        ptr->turn++;
+    }
+}
+
 /*
 xQueueHandle queue;
 xSemaphoreHandle semaphore;
@@ -101,16 +180,23 @@ int main(void)
     SetupHardware();
     init_game(seed, &nb_trucks, &width, &height, cristals);
 
-    process_param_t params[1] = {
+    process_param_t params[2] = {
         {.thread_id = 1, .turn = 0, .move = MOVE, .truck_id = 0, .x = 0, .y = 0},
-    };
+        {.thread_id = 2, .turn = 0, .move = MOVE, .truck_id = 1, .x = 0, .y = 1}};
 
-    xTaskCreate(function,
-                "thread_premier_camion",
+    /*xTaskCreate(function,
+            "thread_premier_camion",
+            configMINIMAL_STACK_SIZE,
+            &params[0], /* parameters of function
+            1, /* priority
+            NULL); /* to not get the task handle*/
+
+    xTaskCreate(function2,
+                "thread_deuxième_camion",
                 configMINIMAL_STACK_SIZE,
-                params, /* parameters of function */
-                1,      /* priority */
-                NULL);  /* to not get the task handle */
+                &params[1], /* parameters of function */
+                2,          /* priority */
+                NULL);
 
     // queue = xQueueCreate(20, 2); // 2 bytes in each queue slot (a short integer)
     /*vSemaphoreCreateBinary(semaphore); // mutex
