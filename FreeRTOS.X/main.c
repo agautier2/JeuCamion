@@ -26,7 +26,7 @@ static unsigned int seed;
 static uint8_t nb_trucks;
 static uint8_t width;
 static uint8_t height;
-static uint8_t cristals;
+static uint8_t cristals[MAX_HEIGHT * MAX_WIDTH];
 
 typedef enum
 {
@@ -37,7 +37,7 @@ typedef enum
 typedef struct
 {
     uint8_t thread_id;
-    uint8_t turn;
+    uint16_t turn;
     move_t move;
     uint8_t truck_id;
     uint8_t x;
@@ -49,13 +49,42 @@ static void SetupHardware(void);
 void function(void *params)
 {
     char commands[20];
-    while (1)
 
+    char *moves[2] = {"MOVE", "DIG"};
+    process_param_t *ptr = params;
+    int8_t sign = 1;
+    while (1)
     {
-        *(uint8_t *)params->x++;
-        sprintf(commands, "%d %s %d %d %d", params->turn, params->move, params->truck_id, params->x, params->y);
+
+        if (cristals[ptr->x + ptr->y * width])
+        {
+            ptr->move = 1;
+            cristals[ptr->x + ptr->y * width]--;
+        }
+        else
+        {
+            ptr->move = 0;
+            if (ptr->x >= width - 1 && sign == 1)
+            {
+                ptr->y++;
+                ptr->x++;
+                sign = -1;
+            }
+            else if (ptr->x == 0 && sign == -1)
+            {
+                ptr->x--;
+                ptr->y++;
+                sign = 1;
+            }
+            ptr->x += sign;
+        }
+        sprintf(commands, "%d %s %d %d %d", ptr->turn, moves[ptr->move], ptr->truck_id, ptr->x, ptr->y);
         puts(commands);
-        vTaskDelay(10000);
+        ptr->turn++;
+        if (ptr->y > height - 1)
+        {
+            break;
+        }
     }
 }
 
@@ -70,8 +99,7 @@ int main(void)
 {
     /* Prepare the hardware to run */
     SetupHardware();
-
-    init_game(seed, &nb_trucks, &width, &height, &cristals);
+    init_game(seed, &nb_trucks, &width, &height, cristals);
 
     process_param_t params[1] = {
         {.thread_id = 1, .turn = 0, .move = MOVE, .truck_id = 0, .x = 0, .y = 0},
@@ -108,6 +136,8 @@ static void SetupHardware(void)
     vHardwareUseMultiVectoredInterrupts();
     portDISABLE_INTERRUPTS();
 
+    UART_Init(115200);
+
     // hardware setup for BASYS MX3
     // Set ports for onboard LEDs to outputs
     DDPCONbits.JTAGEN = 0; // allow access to all of PortA
@@ -116,7 +146,6 @@ static void SetupHardware(void)
     LED_Init();
     SWT_Init();
     BTN_Init();
-    UART_Init(115200);
 
     // set pins as digital outputs for the SSD
     // these defines are created in the Digilent library  config.h
