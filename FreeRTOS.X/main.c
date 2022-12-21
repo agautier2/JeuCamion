@@ -28,6 +28,9 @@ static uint8_t nb_trucks;
 static uint8_t width;
 static uint8_t height;
 static uint8_t cristals[MAX_HEIGHT * MAX_WIDTH];
+static uint16_t turn = 0;
+static uint8_t nb_passage = 1;
+SemaphoreHandle_t xSemaphore = NULL;
 
 typedef enum
 {
@@ -47,44 +50,104 @@ typedef struct
 
 static void SetupHardware(void);
 
+void count_passage_semaphore()
+{
+    char test[50];
+    if (nb_passage == 2)
+    {
+        sprintf(test, "nb de passage :%d", nb_passage);
+        puts(test);
+        turn++;
+        nb_passage = 1;
+    }
+    else
+    {
+        nb_passage++;
+    }
+}
+
 void function(void *params)
 {
     char commands[20];
 
     char *moves[2] = {"MOVE", "DIG"};
     process_param_t *ptr = params;
-    int8_t sign = 1;
-    while (1)
-    {
+    uint8_t min_distance = 255;
+    uint8_t x;
+    uint8_t y;
+    uint8_t d;
+    uint8_t coordonnee_x_la_plus_proche = 0;
+    uint8_t coordonnee_y_la_plus_proche = 0;
+    uint8_t hauteur;
+    uint8_t largeur;
 
-        if (cristals[ptr->x + ptr->y * width])
+    if (xSemaphore != NULL)
+    {
+        while (1)
         {
-            ptr->move = 1;
-            cristals[ptr->x + ptr->y * width]--;
-        }
-        else
-        {
-            ptr->move = 0;
-            if (ptr->x >= width - 1 && sign == 1)
+            if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE)
             {
-                ptr->y++;
-                ptr->x++;
-                sign = -1;
+                min_distance = MAX_HEIGHT + MAX_WIDTH;
+                for (hauteur = 0; hauteur < height; hauteur++)
+                {
+                    for (largeur = 0; largeur < width; largeur++)
+                    {
+                        if (cristals[largeur + hauteur * width])
+                        {
+                            x = abs(largeur - ptr->x);
+                            y = abs(hauteur - ptr->y);
+                            d = x + y;
+
+                            if (d < min_distance)
+                            {
+                                min_distance = d;
+                                coordonnee_x_la_plus_proche = largeur;
+                                coordonnee_y_la_plus_proche = hauteur;
+                            }
+                        }
+                    }
+                }
+                if (min_distance == MAX_HEIGHT + MAX_WIDTH)
+                {
+                    break;
+                }
+
+                if (ptr->x > coordonnee_x_la_plus_proche)
+                {
+                    ptr->move = 0;
+                    ptr->x -= 1;
+                }
+                else if (ptr->x < coordonnee_x_la_plus_proche)
+                {
+                    ptr->move = 0;
+                    ptr->x += 1;
+                }
+                else if (ptr->y > coordonnee_y_la_plus_proche)
+                {
+                    ptr->move = 0;
+                    ptr->y -= 1;
+                }
+                else if (ptr->y < coordonnee_y_la_plus_proche)
+                {
+                    ptr->move = 0;
+                    ptr->y += 1;
+                }
+                else
+                {
+                    ptr->move = 1;
+                }
+
+                if (ptr->move == 1)
+                {
+                    cristals[ptr->x + ptr->y * width]--;
+                }
+
+                sprintf(commands, "%d %s %d %d %d", turn, moves[ptr->move], ptr->truck_id, ptr->x, ptr->y);
+                puts(commands);
             }
-            else if (ptr->x == 0 && sign == -1)
-            {
-                ptr->x--;
-                ptr->y++;
-                sign = 1;
-            }
-            ptr->x += sign;
-        }
-        sprintf(commands, "%d %s %d %d %d", ptr->turn, moves[ptr->move], ptr->truck_id, ptr->x, ptr->y);
-        puts(commands);
-        ptr->turn++;
-        if (ptr->y > height - 1)
-        {
-            break;
+            count_passage_semaphore();
+            xSemaphoreGive(xSemaphore);
+            vTaskDelay(100);
         }
     }
 }
@@ -104,66 +167,74 @@ void function2(void *params)
     uint8_t hauteur;
     uint8_t largeur;
 
-    while (1)
+    if (xSemaphore != NULL)
     {
-        min_distance = MAX_HEIGHT + MAX_WIDTH;
-        for (hauteur = 0; hauteur < height; hauteur++)
+        while (1)
         {
-            for (largeur = 0; largeur < width; largeur++)
+            if (xSemaphoreTake(xSemaphore, portMAX_DELAY) == pdTRUE)
             {
-                if (cristals[largeur + hauteur * width])
+                min_distance = MAX_HEIGHT + MAX_WIDTH;
+                for (hauteur = 0; hauteur < height; hauteur++)
                 {
-                    x = abs(largeur - ptr->x);
-                    y = abs(hauteur - ptr->y);
-                    d = x + y;
-
-                    if (d < min_distance)
+                    for (largeur = 0; largeur < width; largeur++)
                     {
-                        min_distance = d;
-                        coordonnee_x_la_plus_proche = largeur;
-                        coordonnee_y_la_plus_proche = hauteur;
+                        if (cristals[largeur + hauteur * width])
+                        {
+                            x = abs(largeur - ptr->x);
+                            y = abs(hauteur - ptr->y);
+                            d = x + y;
+
+                            if (d < min_distance)
+                            {
+                                min_distance = d;
+                                coordonnee_x_la_plus_proche = largeur;
+                                coordonnee_y_la_plus_proche = hauteur;
+                            }
+                        }
                     }
                 }
+                if (min_distance == MAX_HEIGHT + MAX_WIDTH)
+                {
+                    break;
+                }
+
+                if (ptr->x > coordonnee_x_la_plus_proche)
+                {
+                    ptr->move = 0;
+                    ptr->x -= 1;
+                }
+                else if (ptr->x < coordonnee_x_la_plus_proche)
+                {
+                    ptr->move = 0;
+                    ptr->x += 1;
+                }
+                else if (ptr->y > coordonnee_y_la_plus_proche)
+                {
+                    ptr->move = 0;
+                    ptr->y -= 1;
+                }
+                else if (ptr->y < coordonnee_y_la_plus_proche)
+                {
+                    ptr->move = 0;
+                    ptr->y += 1;
+                }
+                else
+                {
+                    ptr->move = 1;
+                }
+
+                if (ptr->move == 1)
+                {
+                    cristals[ptr->x + ptr->y * width]--;
+                }
+
+                sprintf(commands, "%d %s %d %d %d", turn, moves[ptr->move], ptr->truck_id, ptr->x, ptr->y);
+                puts(commands);
             }
+            count_passage_semaphore();
+            xSemaphoreGive(xSemaphore);
+            vTaskDelay(100);
         }
-        if (min_distance == MAX_HEIGHT + MAX_WIDTH)
-        {
-            break;
-        }
-
-        if (ptr->x > coordonnee_x_la_plus_proche)
-        {
-            ptr->move = 0;
-            ptr->x -= 1;
-        }
-        else if (ptr->x < coordonnee_x_la_plus_proche)
-        {
-            ptr->move = 0;
-            ptr->x += 1;
-        }
-        else if (ptr->y > coordonnee_y_la_plus_proche)
-        {
-            ptr->move = 0;
-            ptr->y -= 1;
-        }
-        else if (ptr->y < coordonnee_y_la_plus_proche)
-        {
-            ptr->move = 0;
-            ptr->y += 1;
-        }
-        else
-        {
-            ptr->move = 1;
-        }
-
-        if (ptr->move == 1)
-        {
-            cristals[ptr->x + ptr->y * width]--;
-        }
-
-        sprintf(commands, "%d %s %d %d %d", ptr->turn, moves[ptr->move], ptr->truck_id, ptr->x, ptr->y);
-        puts(commands);
-        ptr->turn++;
     }
 }
 
@@ -178,30 +249,33 @@ int main(void)
 {
     /* Prepare the hardware to run */
     SetupHardware();
-    init_game(seed, &nb_trucks, &width, &height, cristals);
+
+    init_game(4, &nb_trucks, &width, &height, cristals);
 
     process_param_t params[2] = {
         {.thread_id = 1, .turn = 0, .move = MOVE, .truck_id = 0, .x = 0, .y = 0},
         {.thread_id = 2, .turn = 0, .move = MOVE, .truck_id = 1, .x = 0, .y = 1}};
 
-    /*xTaskCreate(function,
-            "thread_premier_camion",
-            configMINIMAL_STACK_SIZE,
-            &params[0], /* parameters of function
-            1, /* priority
-            NULL); /* to not get the task handle*/
+    // vSemaphoreCreateBinary(semaphore); // mutex
+    xSemaphore = xSemaphoreCreateMutex();
+
+    xTaskCreate(function,
+                "thread_premier_camion",
+                500,
+                &params[0],       /* parameters of function */
+                tskIDLE_PRIORITY, /* priority*/
+                NULL);            /* to not get the task handle*/
 
     xTaskCreate(function2,
                 "thread_deuxième_camion",
-                configMINIMAL_STACK_SIZE,
-                &params[1], /* parameters of function */
-                2,          /* priority */
+                500,
+                &params[1],       /* parameters of function */
+                tskIDLE_PRIORITY, /* priority */
                 NULL);
 
     // queue = xQueueCreate(20, 2); // 2 bytes in each queue slot (a short integer)
-    /*vSemaphoreCreateBinary(semaphore); // mutex
-    vTaskDelay(20);
-     */
+    // vSemaphoreCreateBinary(semaphore); // mutex
+    // vTaskDelay(20);
 
     macro_enable_interrupts(); //    enable interrupts at CPU
 
