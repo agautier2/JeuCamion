@@ -28,3 +28,7 @@
 # Misc
 .svn
 *.bak
+
+#identifier
+*.Identifier
+*.txt
